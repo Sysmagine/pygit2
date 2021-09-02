@@ -2052,6 +2052,51 @@ Repository_apply(Repository *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Repository_apply_to_tree__doc__,
+    "apply_to_tree(tree, diff) -> tree\n"
+    "\n"
+    "Applies the given Diff object to the tree, and returns the resulting\n"
+    "tree.");
+
+PyObject *
+Repository_apply_to_tree(Repository *self, PyObject *args,
+                         PyObject *kw)
+{
+    git_apply_options options = GIT_APPLY_OPTIONS_INIT;
+    char *keywords[] = {"tree", "diff", NULL};
+    PyObject *py_oid;
+    git_index *index;
+    git_tree *tree;
+    Diff *py_diff;
+    git_oid oid;
+    size_t len;
+    int err;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "OO!", keywords,
+                                     &py_oid, &DiffType, &py_diff))
+        return NULL;
+
+    len = py_oid_to_git_oid(py_oid, &oid);
+    if (len == 0)
+        return NULL;
+
+    err = git_tree_lookup_prefix(&tree, self->repo, &oid, len);
+    if (err < 0)
+        return Error_set(err);
+
+    err = git_apply_to_tree(&index, self->repo, tree, py_diff->diff, &options);
+    git_tree_free(tree);
+    if (err < 0)
+        return Error_set(err);
+
+    err = git_index_write_tree_to(&oid, index, self->repo);
+    git_index_free(index);
+    if (err < 0)
+        return Error_set(err);
+
+    return git_oid_to_python(&oid);
+}
+
 PyDoc_STRVAR(Repository_applies__doc__,
   "applies(diff) -> bool\n"
   "\n"
@@ -2120,6 +2165,7 @@ PyMethodDef Repository_methods[] = {
     METHOD(Repository, merge, METH_O),
     METHOD(Repository, cherrypick, METH_O),
     METHOD(Repository, apply, METH_VARARGS),
+    METHOD(Repository, apply_to_tree, METH_VARARGS | METH_KEYWORDS),
     METHOD(Repository, applies, METH_O),
     METHOD(Repository, create_reference_direct, METH_VARARGS | METH_KEYWORDS),
     METHOD(Repository, create_reference_symbolic, METH_VARARGS | METH_KEYWORDS),
